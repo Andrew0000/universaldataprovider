@@ -18,7 +18,7 @@ class MainActivity : AppCompatActivity() {
                 AppDataProviders.provider.getFromCacheElseFetch("params1")
                     .observeOn(AndroidSchedulers.mainThread())
                     .doOnSubscribe {
-                        textView1.text = "Loading..."
+                        textView1.text = "1 Loading..."
                     }
                     .subscribe(
                             { textView1.text = "$it" },
@@ -27,10 +27,10 @@ class MainActivity : AppCompatActivity() {
         )
 
         disposable.add(
-                AppDataProviders.provider.getFromCacheElseFetch("params2")
+                AppDataProviders.provider.getFromCacheAndFetchAnyway("params2", disposable)
                         .observeOn(AndroidSchedulers.mainThread())
                         .doOnSubscribe {
-                            textView2.text = "Loading..."
+                            textView2.text = "2 Loading..."
                         }
                         .subscribe(
                                 { textView2.text = "$it" },

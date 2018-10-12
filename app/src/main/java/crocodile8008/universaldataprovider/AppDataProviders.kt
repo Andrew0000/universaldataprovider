@@ -6,7 +6,7 @@ import crocodile8008.libuniversaldataprovider.TimeMemoryCache
 object AppDataProviders {
 
     val provider = DataProvider(TimeMemoryCache<String, DomainModel>(
-            lifeTimeMillis = 5000L,
+            lifeTimeMillis = 10000L,
             maxSize = 10
     )) { key ->
         MockNetworkService.load(key).firstOrError()

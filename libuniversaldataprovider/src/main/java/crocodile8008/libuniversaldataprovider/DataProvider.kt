@@ -1,7 +1,7 @@
 package crocodile8008.libuniversaldataprovider
 
-import io.reactivex.Observable
 import io.reactivex.Single
+import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
 
 class DataProvider<K, V>(
@@ -9,63 +9,36 @@ class DataProvider<K, V>(
     private val fetch: (key: K) -> Single<V>
 ) {
 
-    private val ongoingFetching = HashMap<K, Observable<V>>()
-
-    fun getFromCacheElseFetch(key: K): Single<V> {
-        return createSharedFetch(key, fromCacheElseFetch(key))
+    private val ongoingFetch = SharedRequest<K, V> { key ->
+        fetch.invoke(key).doOnSuccess { cache[key] = it }
     }
 
-    fun getFromCache(key: K): Single<V> {
-        return createSharedFetch(key, fromCacheOnly(key))
+    fun fetchAndStoreToCache(key: K): Single<V> {
+        return ongoingFetch.performOrAttachToOngoing(key)
+                .subscribeOn(Schedulers.io())
     }
 
-    fun getFromFetch(key: K): Single<V> {
-        return createSharedFetch(key, fetchOnly(key))
+    fun getFromCache(key: K): Single<V> = Single.defer {
+        Single.defer { Single.just(cache[key]) }
+                .subscribeOn(Schedulers.io())
     }
 
-    private fun createSharedFetch(key: K, getStrategy: Single<WrappedValue<V>>): Single<V> = Observable
-                .defer {
-                    synchronized(ongoingFetching) {
-                        ongoingFetching[key]?.let { cachedShared ->
-                            return@defer cachedShared
-                        }
+    fun getFromCacheElseFetch(key: K): Single<V> = Single.defer {
+        getFromCache(key)
+        .onErrorResumeNext { t: Throwable ->
+            fetchAndStoreToCache(key)
+        }
+    }
 
-                        val newShared =
-                                getStrategy
-                                .subscribeOn(Schedulers.io())
-                                .doOnSuccess { wrapped ->
-                                    if (!wrapped.isFromCache) {
-                                        synchronized(cache) { cache[key] = wrapped.value }
-                                    }
-                                }
-                                .doFinally {
-                                    synchronized(ongoingFetching) { ongoingFetching.remove(key) }
-                                }
-                                .map { wrapped -> wrapped.value }
-                                .toObservable()
-                                .replay(1)
-                                .refCount()
-
-                        ongoingFetching[key] = newShared
-                        return@defer newShared
-                    }
-                }
-                .firstOrError()
-
-    private fun fromCacheElseFetch(key: K): Single<WrappedValue<V>> =
-            fromCacheOnly(key)
-            .onErrorResumeNext { fetchOnly(key) }
-
-    private fun fromCacheOnly(key: K): Single<WrappedValue<V>> = Single
-            .fromCallable {
-                synchronized(cache) {
-                    val cached = cache[key] ?: throw NullPointerException()
-                    return@fromCallable WrappedValue(value = cached, isFromCache = true)
-                }
-            }
-
-    private fun fetchOnly(key: K): Single<WrappedValue<V>> = fetch.invoke(key)
-            .map { WrappedValue(value = it, isFromCache = false) }
-
-    private data class WrappedValue<V>(val value: V, val isFromCache: Boolean)
+    fun getFromCacheAndFetchAnyway(key: K, updateFetchDisposable: CompositeDisposable): Single<V> = Single.defer {
+        getFromCache(key)
+        .doOnSuccess { _ ->
+            updateFetchDisposable.add(
+                fetchAndStoreToCache(key).subscribe({}, {})
+            )
+        }
+        .onErrorResumeNext { _ ->
+            fetchAndStoreToCache(key)
+        }
+    }
 }
