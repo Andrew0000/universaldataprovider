@@ -27,7 +27,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         disposable.add(
-                AppDataProviders.provider.getFromCacheAndFetchAnyway("params2", disposable)
+                AppDataProviders.provider.getFromCacheFetchAnyway("params2")
                         .observeOn(AndroidSchedulers.mainThread())
                         .doOnSubscribe {
                             textView2.text = "2 Loading..."

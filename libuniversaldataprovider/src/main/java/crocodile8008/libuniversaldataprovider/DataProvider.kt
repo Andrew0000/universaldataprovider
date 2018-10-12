@@ -1,13 +1,16 @@
 package crocodile8008.libuniversaldataprovider
 
 import io.reactivex.Single
-import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.functions.Consumer
 import io.reactivex.schedulers.Schedulers
 
 class DataProvider<K, V>(
     private val cache: Cache<K, V>,
     private val fetch: (key: K) -> Single<V>
 ) {
+
+    private val emptyConsumerV : Consumer<V> = Consumer { }
+    private val emptyConsumerT : Consumer<Throwable> = Consumer { }
 
     private val ongoingFetch = SharedRequest<K, V> { key ->
         fetch.invoke(key).doOnSuccess { cache[key] = it }
@@ -30,12 +33,10 @@ class DataProvider<K, V>(
         }
     }
 
-    fun getFromCacheAndFetchAnyway(key: K, updateFetchDisposable: CompositeDisposable): Single<V> = Single.defer {
+    fun getFromCacheFetchAnyway(key: K): Single<V> = Single.defer {
         getFromCache(key)
         .doOnSuccess { _ ->
-            updateFetchDisposable.add(
-                fetchAndStoreToCache(key).subscribe({}, {})
-            )
+            fetchAndStoreToCache(key).subscribe(emptyConsumerV, emptyConsumerT)
         }
         .onErrorResumeNext { _ ->
             fetchAndStoreToCache(key)
