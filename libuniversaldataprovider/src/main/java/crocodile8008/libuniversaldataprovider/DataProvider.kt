@@ -21,6 +21,11 @@ class DataProvider<K, V>(
                 .subscribeOn(Schedulers.io())
     }
 
+    fun fetchAndStoreToCacheAnyway(key: K) {
+        fetchAndStoreToCache(key)
+                .subscribe(emptyConsumerV, emptyConsumerT)
+    }
+
     fun getFromCache(key: K): Single<V> = Single.defer {
         Single.defer { Single.just(cache[key]) }
                 .subscribeOn(Schedulers.io())
@@ -34,12 +39,9 @@ class DataProvider<K, V>(
     }
 
     fun getFromCacheFetchAnyway(key: K): Single<V> = Single.defer {
-        getFromCache(key)
+        getFromCacheElseFetch(key)
         .doOnSuccess { _ ->
-            fetchAndStoreToCache(key).subscribe(emptyConsumerV, emptyConsumerT)
-        }
-        .onErrorResumeNext { _ ->
-            fetchAndStoreToCache(key)
+            fetchAndStoreToCacheAnyway(key)
         }
     }
 }
